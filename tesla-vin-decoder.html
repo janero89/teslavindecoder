@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tesla VIN Decoder</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600;700&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --red: #e31937;
+    --red-dim: #8a0f21;
+    --bg: #0a0a0b;
+    --surface: #111113;
+    --surface2: #1a1a1e;
+    --border: #252528;
+    --text: #f0f0f2;
+    --muted: #6b6b72;
+    --accent: #e31937;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(227,25,55,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(227,25,55,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    margin-bottom: 52px;
+    animation: fadeDown 0.6s ease both;
+  }
+
+  .logo-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin-bottom: 10px;
+  }
+
+  .tesla-t {
+    width: 36px;
+    height: 36px;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 6vw, 3.2rem);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+
+  h1 span { color: var(--red); }
+
+  .subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+
+  /* Input area */
+  .input-wrap {
+    position: relative;
+    margin-bottom: 40px;
+    animation: fadeDown 0.6s 0.1s ease both;
+  }
+
+  .input-label {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.25em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .vin-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 18px 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(1.1rem, 3vw, 1.5rem);
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    color: var(--text);
+    text-transform: uppercase;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    caret-color: var(--red);
+  }
+
+  .vin-input::placeholder { color: var(--muted); font-weight: 300; }
+
+  .vin-input:focus {
+    border-color: var(--red);
+    box-shadow: 0 0 0 3px rgba(227,25,55,0.12), 0 0 20px rgba(227,25,55,0.05);
+  }
+
+  .char-counter {
+    position: absolute;
+    right: 16px;
+    bottom: -22px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+
+  .char-counter.valid { color: #34d399; }
+  .char-counter.invalid { color: var(--red); }
+
+  /* VIN visual strip */
+  .vin-strip {
+    display: flex;
+    gap: 3px;
+    margin-bottom: 40px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    animation: fadeDown 0.6s 0.15s ease both;
+  }
+
+  .vin-cell {
+    flex: 1;
+    min-width: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 4px 6px;
+    text-align: center;
+    transition: all 0.25s;
+    cursor: default;
+  }
+
+  .vin-cell.active {
+    background: var(--surface2);
+    border-color: var(--red-dim);
+  }
+
+  .vin-cell.highlighted {
+    background: rgba(227,25,55,0.12);
+    border-color: var(--red);
+    transform: translateY(-2px);
+  }
+
+  .vin-cell .char {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(0.75rem, 2vw, 1rem);
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+    min-height: 1em;
+    display: block;
+  }
+
+  .vin-cell .pos {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+    color: var(--muted);
+    margin-top: 4px;
+    display: block;
+  }
+
+  /* Results grid */
+  .results {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    animation: fadeUp 0.5s 0.2s ease both;
+  }
+
+  @media (max-width: 600px) {
+    .results { grid-template-columns: 1fr; }
+  }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+
+  .result-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--red-dim);
+    transition: background 0.2s;
+  }
+
+  .result-card.active::before { background: var(--red); }
+  .result-card.active {
+    border-color: rgba(227,25,55,0.3);
+    transform: translateX(2px);
+  }
+
+  .result-card.full-width {
+    grid-column: 1 / -1;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .card-pos {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--red);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    background: rgba(227,25,55,0.1);
+    padding: 2px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .card-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .card-value {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+    min-height: 1.4em;
+  }
+
+  .card-value.empty {
+    color: var(--muted);
+    font-weight: 300;
+    font-style: italic;
+    font-size: 0.9rem;
+  }
+
+  .card-char {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: var(--red);
+    position: absolute;
+    right: 18px;
+    bottom: 14px;
+    opacity: 0.5;
+    line-height: 1;
+  }
+
+  /* Empty / placeholder state */
+  .placeholder {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .placeholder-icon {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+    opacity: 0.3;
+  }
+
+  /* Error message */
+  .error-msg {
+    background: rgba(227,25,55,0.07);
+    border: 1px solid rgba(227,25,55,0.25);
+    border-radius: 6px;
+    padding: 14px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: #ff6b7a;
+    letter-spacing: 0.08em;
+    margin-bottom: 24px;
+    display: none;
+  }
+
+  .error-msg.show { display: block; }
+
+  /* Animations */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    margin-top: 56px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    opacity: 0.5;
+  }
+
+  /* Quick examples */
+  .examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+    animation: fadeDown 0.6s 0.2s ease both;
+  }
+
+  .example-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    align-self: center;
+    margin-right: 4px;
+  }
+
+  .example-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    transition: all 0.2s;
+  }
+
+  .example-btn:hover {
+    border-color: var(--red-dim);
+    color: var(--text);
+    background: var(--surface2);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo-line">
+      <svg class="tesla-t" viewBox="0 0 100 100" fill="none">
+        <path d="M50 20 L80 20 Q90 20 90 10 L10 10 Q10 20 20 20 L50 20 Z" fill="#e31937"/>
+        <rect x="46" y="20" width="8" height="70" fill="#e31937"/>
+      </svg>
+      <h1>VIN <span>Decoder</span></h1>
+    </div>
+    <p class="subtitle">Número de bastidor Tesla · Decodificador completo</p>
+  </header>
+
+  <!-- Input -->
+  <div class="input-wrap">
+    <label class="input-label" for="vinInput">// introduce el VIN (17 caracteres)</label>
+    <input
+      id="vinInput"
+      class="vin-input"
+      type="text"
+      maxlength="17"
+      placeholder="5YJ3E1EA1NF000001"
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <span class="char-counter" id="charCounter">0 / 17</span>
+  </div>
+
+  <!-- Examples -->
+  <div class="examples">
+    <span class="example-label">Ejemplos →</span>
+    <button class="example-btn" onclick="setVin('5YJYGDEE0SF000001')">Model Y · Fremont 2025</button>
+    <button class="example-btn" onclick="setVin('LRWYGCEL0SC000001')">Model Y · Shanghai 2025</button>
+    <button class="example-btn" onclick="setVin('5YJ3E1EA4SF000001')">Model 3 · Fremont 2025</button>
+    <button class="example-btn" onclick="setVin('5YJSA1E2XSF000001')">Model S · Fremont 2025</button>
+    <button class="example-btn" onclick="setVin('5YJXCAE40SF000001')">Model X · Fremont 2025</button>
+    <button class="example-btn" onclick="setVin('7FCTGAAA0SF000001')">Cybertruck 2025</button>
+  </div>
+
+  <!-- VIN visual strip -->
+  <div id="vinStrip" class="vin-strip" style="margin-top:28px;"></div>
+
+  <!-- Error -->
+  <div id="errorMsg" class="error-msg"></div>
+
+  <!-- Results -->
+  <div id="results"></div>
+
+</div>
+
+<footer>TESLA VIN DECODER · ESTÁNDAR ISO 3779 · SOLO USO INFORMATIVO</footer>
+
+<script>
+// ─── VIN Data ─────────────────────────────────────────────────────────────────
+
+// Detectar modelo a partir del VIN completo (pos 4, índice 3)
+function detectModel(vin) {
+  if (!vin || vin.length < 4) return null;
+  const c = vin[3].toUpperCase();
+  const models = { 'S':'Model S','3':'Model 3','X':'Model X','Y':'Model Y','C':'Cybertruck','R':'Roadster','T':'Semi' };
+  return models[c] || null;
+}
+
+const VIN_STRUCTURE = [
+  // ── Posiciones 1–3: WMI ──────────────────────────────────────────────────
+  {
+    pos: '1–3', label: 'Identificador mundial del fabricante (WMI)',
+    title: 'WMI — Fabricante y planta origen',
+    chars: 3,
+    decode: (v) => {
+      const map = {
+        // Model S / X / 3 / Y — Fremont (hasta MY2021)
+        '5YJ': 'Tesla · Fremont, CA (EE.UU.) — hasta año modelo 2021',
+        // Model Y / 3 — Fremont + Austin (desde MY2022)
+        '7SA': 'Tesla · Fremont / Austin, TX (EE.UU.) — desde año modelo 2022',
+        // Model Y / 3 — Giga Shanghai
+        'LRW': 'Tesla · Giga Shanghai (China)',
+        // Model Y — Giga Berlin
+        'XP7': 'Tesla · Giga Berlin (Alemania)',
+        // Model S / X / Roadster (primeros)
+        '5YJ': 'Tesla · Fremont, CA (EE.UU.)',
+        // Semi
+        '7GT': 'Tesla · Giga Nevada (Semi)',
+        // Cybertruck
+        '7FC': 'Tesla · Giga Texas (Cybertruck)',
+      };
+      return map[v] || `Código WMI: ${v} · Tesla Motors`;
+    }
+  },
+
+  // ── Posición 4: Modelo ───────────────────────────────────────────────────
+  {
+    pos: '4', label: 'Modelo',
+    title: 'VDS — Modelo',
+    chars: 1,
+    decode: (v) => {
+      const map = {
+        'S': 'Model S — Berlina de lujo',
+        '3': 'Model 3 — Berlina compacta',
+        'X': 'Model X — SUV de lujo',
+        'Y': 'Model Y — SUV compacto',
+        'C': 'Cybertruck — Pick-up eléctrico',
+        'R': 'Roadster — Sport',
+        'T': 'Semi — Camión eléctrico'
+      };
+      return map[v] || `Código: ${v}`;
+    }
+  },
+
+  // ── Posición 5: Carrocería ───────────────────────────────────────────────
+  {
+    pos: '5', label: 'Tipo de carrocería / volante',
+    title: 'VDS — Carrocería',
+    chars: 1,
+    decode: (v, vin) => {
+      const model = detectModel(vin);
+      // Model Y / X (MPV/SUV)
+      const mpv = { 'G':'MPV/SUV 5 puertas · Volante izquierda (LHD)', 'H':'MPV/SUV 5 puertas · Volante derecha (RHD)' };
+      // Model S / 3 (berlina)
+      const sedan = { 'A':'Berlina · Volante izquierda (LHD)', 'B':'Berlina · Volante derecha (RHD)', 'E':'Berlina 4 puertas LHD', 'F':'Berlina 4 puertas RHD' };
+      // Cybertruck
+      const ct = { 'C':'Pick-up · Volante izquierda (LHD)' };
+
+      if (model === 'Model Y' || model === 'Model X') return mpv[v] || `Código: ${v}`;
+      if (model === 'Model S' || model === 'Model 3') return sedan[v] || mpv[v] || `Código: ${v}`;
+      if (model === 'Cybertruck') return ct[v] || `Código: ${v}`;
+      return mpv[v] || sedan[v] || ct[v] || `Código: ${v}`;
+    }
+  },
+
+  // ── Posición 6: Sistemas de sujeción ────────────────────────────────────
+  {
+    pos: '6', label: 'Sistemas de sujeción',
+    title: 'VDS — Cinturones y airbags',
+    chars: 1,
+    decode: (v) => {
+      const map = {
+        'O': 'Cinturones tipo 2 (FR+SR×3+TR×2) · Airbags frontales, PODS, laterales, rodilla',
+        'D': 'Cinturones tipo 2 (FR+SR×3) · Airbags frontales, PODS, laterales, rodilla',
+        'C': 'Cinturones tipo 2 · Airbags frontales, PODS, laterales hinchables',
+        'E': 'Cinturones tipo 2 · Airbags frontales y laterales',
+        'A': 'Cinturones tipo 2 · Sistema de airbags estándar',
+        'B': 'Cinturones tipo 2 · Airbags frontales',
+      };
+      return map[v] || `Código de sujeción: ${v}`;
+    }
+  },
+
+  // ── Posición 7: Combustible / Batería ───────────────────────────────────
+  {
+    pos: '7', label: 'Tipo de combustible / batería',
+    title: 'VDS — Combustible / Química de batería',
+    chars: 1,
+    decode: (v) => {
+      const map = {
+        'E': 'Eléctrico · Batería NMC (iones de litio ternaria)',
+        'F': 'Eléctrico · Batería LFP (litio-ferrofosfato) — Giga Shanghai',
+        'A': 'Eléctrico · Batería de iones de litio (gen. anterior)',
+        'B': 'Eléctrico · Batería de iones de litio (alta capacidad)',
+      };
+      return map[v] || `Código: ${v}`;
+    }
+  },
+
+  // ── Posición 8: Motor / Tracción ─────────────────────────────────────────
+  {
+    pos: '8', label: 'Motor / Unidad de tracción',
+    title: 'VDS — Configuración de motor',
+    chars: 1,
+    decode: (v, vin) => {
+      const model = detectModel(vin);
+      // Model Y (del manual oficial)
+      const modelY = {
+        'D': 'Motor único estándar (RWD)',
+        'E': 'Motor dual estándar (AWD)',
+        'F': 'Motor dual Performance — 3DU 800A (AWD)',
+        'J': 'Motor único estándar (RWD)',
+        'K': 'Motor dual estándar (AWD)',
+        'L': 'Motor dual Performance (AWD)',
+        'R': 'Motor único estándar — 3DU 600A (RWD)',
+        'S': 'Motor único estándar — DUB 600A (RWD)',
+      };
+      // Model S / X / 3 (referencia cruzada)
+      const general = {
+        'A': 'Motor único trasero (RWD)',
+        'B': 'Motor dual (AWD)',
+        'C': 'Motor triple Plaid (AWD)',
+        'D': 'Motor único (RWD)',
+        'E': 'Motor dual (AWD)',
+        'F': 'Motor dual Performance (AWD)',
+        'P': 'Motor único Performance',
+      };
+      const base = (model === 'Model Y') ? modelY : general;
+      return base[v] || modelY[v] || general[v] || `Código: ${v}`;
+    }
+  },
+
+  // ── Posición 9: Dígito de control ────────────────────────────────────────
+  {
+    pos: '9', label: 'Dígito de control',
+    title: 'Dígito de control (verificación ISO)',
+    chars: 1,
+    decode: (v) => `${v} — Verificación matemática obligatoria en Norteamérica (ISO 3779)`
+  },
+
+  // ── Posición 10: Año ─────────────────────────────────────────────────────
+  {
+    pos: '10', label: 'Año modelo / Año de fabricación',
+    title: 'VIS — Año',
+    chars: 1,
+    decode: (v, vin) => {
+      const years = {
+        'A':2010,'B':2011,'C':2012,'D':2013,'E':2014,'F':2015,
+        'G':2016,'H':2017,'J':2018,'K':2019,'L':2020,'M':2021,
+        'N':2022,'P':2023,'R':2024,'S':2025,'T':2026,
+        'V':2027,'W':2028,'X':2029,'Y':2030
+      };
+      const wmi = vin ? vin.slice(0,3).toUpperCase() : '';
+      const isChina = wmi === 'LRW';
+      const isBerlin = wmi === 'XP7';
+      const nota = (isChina || isBerlin) ? 'Año de fabricación' : 'Año modelo';
+      return years[v] ? `${years[v]} · ${nota}` : `Código no reconocido: ${v}`;
+    }
+  },
+
+  // ── Posición 11: Planta ──────────────────────────────────────────────────
+  {
+    pos: '11', label: 'Planta de fabricación',
+    title: 'VIS — Planta',
+    chars: 1,
+    decode: (v) => {
+      const map = {
+        'F': 'Fremont, California (EE.UU.)',
+        'O': 'Austin, Texas (EE.UU.) — Giga Texas',
+        'B': 'Grünheide, Alemania — Giga Berlin',
+        'C': 'Shanghai, China — Giga Shanghai',
+        'N': 'Sparks, Nevada (EE.UU.) — Giga Nevada',
+      };
+      return map[v] || `Código de planta: ${v}`;
+    }
+  },
+
+  // ── Posiciones 12–17: Serie ──────────────────────────────────────────────
+  {
+    pos: '12–17', label: 'Número secuencial de producción',
+    title: 'VIS — Número de serie',
+    chars: 6,
+    decode: (v) => {
+      const n = parseInt(v, 10);
+      return `#${n.toLocaleString('es-ES')} de 999.999 · La numeración no reinicia con cada año modelo`;
+    }
+  }
+];
+
+// ─── DOM refs ─────────────────────────────────────────────────────────────────
+const input    = document.getElementById('vinInput');
+const counter  = document.getElementById('charCounter');
+const strip    = document.getElementById('vinStrip');
+const results  = document.getElementById('results');
+const errorMsg = document.getElementById('errorMsg');
+
+// ─── Init strip ───────────────────────────────────────────────────────────────
+function buildStrip() {
+  strip.innerHTML = '';
+  for (let i = 0; i < 17; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'vin-cell';
+    cell.id = `cell-${i}`;
+    cell.innerHTML = `<span class="char" id="cc-${i}"> </span><span class="pos">${i+1}</span>`;
+    strip.appendChild(cell);
+  }
+}
+
+// ─── Main decode ──────────────────────────────────────────────────────────────
+function decode(vin) {
+  const v = vin.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/gi,'');
+  const len = v.length;
+
+  // Update counter
+  counter.textContent = `${len} / 17`;
+  counter.className = 'char-counter' + (len === 17 ? ' valid' : len > 17 ? ' invalid' : '');
+
+  // Update strip chars
+  for (let i = 0; i < 17; i++) {
+    const cc = document.getElementById(`cc-${i}`);
+    const cell = document.getElementById(`cell-${i}`);
+    if (i < len) {
+      cc.textContent = v[i];
+      cell.classList.add('active');
+    } else {
+      cc.textContent = ' ';
+      cell.classList.remove('active', 'highlighted');
+    }
+  }
+
+  // Validation
+  errorMsg.classList.remove('show');
+
+  if (len === 0) {
+    results.innerHTML = `
+      <div class="placeholder">
+        <div class="placeholder-icon">🔍</div>
+        INTRODUCE UN VIN TESLA DE 17 CARACTERES
+      </div>`;
+    return;
+  }
+
+  if (len < 17) {
+    results.innerHTML = `
+      <div class="placeholder">
+        <div class="placeholder-icon">⌨️</div>
+        ${17 - len} CARÁCTER${17-len!==1?'ES':''} RESTANTE${17-len!==1?'S':''}…
+      </div>`;
+    return;
+  }
+
+  if (len === 17) renderCards(v);
+}
+
+function renderCards(vin) {
+  let html = '<div class="results">';
+  let charIdx = 0;
+
+  VIN_STRUCTURE.forEach((item, i) => {
+    const chars = vin.slice(charIdx, charIdx + item.chars);
+    const value = item.decode(chars, vin);
+    const isFull = item.chars > 1;
+
+    html += `
+      <div class="result-card active ${isFull ? 'full-width' : ''}"
+           onmouseenter="highlightCells(${charIdx}, ${item.chars})"
+           onmouseleave="clearHighlight()">
+        <div class="card-header">
+          <span class="card-pos">POS ${item.pos}</span>
+          <span class="card-title">${item.title}</span>
+        </div>
+        <div class="card-value">${value}</div>
+        <span class="card-char">${chars}</span>
+      </div>`;
+
+    charIdx += item.chars;
+  });
+
+  html += '</div>';
+  results.innerHTML = html;
+}
+
+function highlightCells(start, count) {
+  for (let i = 0; i < 17; i++) {
+    const cell = document.getElementById(`cell-${i}`);
+    if (i >= start && i < start + count) {
+      cell.classList.add('highlighted');
+    } else {
+      cell.classList.remove('highlighted');
+    }
+  }
+}
+
+function clearHighlight() {
+  for (let i = 0; i < 17; i++) {
+    document.getElementById(`cell-${i}`).classList.remove('highlighted');
+  }
+}
+
+function setVin(vin) {
+  input.value = vin;
+  decode(vin);
+  input.focus();
+}
+
+// ─── Events ───────────────────────────────────────────────────────────────────
+input.addEventListener('input', () => decode(input.value));
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+buildStrip();
+decode('');
+</script>
+</body>
+</html>
